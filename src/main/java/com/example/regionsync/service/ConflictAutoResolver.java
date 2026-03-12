@@ -26,7 +26,7 @@ public class ConflictAutoResolver {
     private final SyncProperties syncProperties;
     private final ConflictRecordService conflictRecordService;
 
-    @Scheduled(fixedDelay = 60000)
+    @Scheduled(fixedDelay = 60000)   // Polls every 60 s; only processes conflicts older than 5 min (see cutoff below)
     @Transactional
     public void autoResolve() {
         if (!syncProperties.getConflict().isAutoResolveEnabled()) {

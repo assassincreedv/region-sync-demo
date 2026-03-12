@@ -180,14 +180,6 @@ public class SyncEventConsumer {
 
     @SuppressWarnings("unchecked")
     private SyncResult handleUpdate(SyncEvent event, EntityMapper mapper, ConflictStrategy strategy) {
-        if (!"companies".equals(event.getTableName())) {
-            return SyncResult.builder()
-                    .eventId(event.getEventId())
-                    .success(false)
-                    .action("SKIPPED")
-                    .reason("Table not supported for update")
-                    .build();
-        }
         Optional<Company> localOpt = companyRepository.findByCompanyCode(event.getBusinessKey());
         if (localOpt.isEmpty()) {
             // Entity doesn't exist locally — apply as create

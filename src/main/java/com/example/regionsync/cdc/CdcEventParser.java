@@ -43,7 +43,8 @@ public class CdcEventParser {
             Object versionObj = data.get("version");
             Integer remoteVersion = versionObj != null ? Integer.parseInt(versionObj.toString()) : 0;
 
-            String eventId = tableName + ":" + (businessKey != null ? businessKey : "unknown") + ":" + sourceTimestampMs;
+            String eventId = tableName + ":" + (businessKey != null ? businessKey : "unknown") + ":"
+                    + (sourceTimestampMs != null ? sourceTimestampMs : "unknown");
 
             return Optional.of(SyncEvent.builder()
                     .eventId(eventId)

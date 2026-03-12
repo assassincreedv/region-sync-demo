@@ -28,7 +28,8 @@ public class GlobalLockService {
         try {
             acquired = lock.tryLock(WAIT_SECONDS, LEASE_SECONDS, TimeUnit.SECONDS);
             if (!acquired) {
-                throw new IllegalStateException("Could not acquire lock for key: " + lockKey);
+                throw new IllegalStateException(
+                        "Could not acquire lock for key '" + lockKey + "' after waiting " + WAIT_SECONDS + "s");
             }
             action.run();
         } catch (InterruptedException e) {

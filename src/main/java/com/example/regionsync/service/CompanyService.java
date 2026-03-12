@@ -49,7 +49,7 @@ public class CompanyService {
         if (updates.getAddress() != null) existing.setAddress(updates.getAddress());
         if (updates.getContactEmail() != null) existing.setContactEmail(updates.getContactEmail());
         if (updates.getStatus() != null) existing.setStatus(updates.getStatus());
-        if (updates.getCompanyCode() != null) existing.setCompanyCode(updates.getCompanyCode());
+        // company_code is the business key and must not be changed after creation
         return companyRepository.save(existing);
     }
 
