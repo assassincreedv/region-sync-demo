@@ -1,0 +1,24 @@
+sync:
+  current-region: EU
+  remote-region: NA
+  database-name: app_eu
+  tables:
+    companies:
+      name: companies
+      business-key-field: companyCode
+      dedup-on-insert: true
+      conflict-strategy: FIRST_WRITER_WINS
+  conflict:
+    auto-resolve-enabled: true
+    tie-breaker-strategy: REGION_PRIORITY
+
+sync-topics:
+  remote-cdc-topics: na.cdc.app_na.companies
+  rejection-inbox: sync.rejection.eu
+  rejection-outbox: sync.rejection.na
+  dead-letter-topic: sync.dlt.eu
+
+spring:
+  kafka:
+    consumer:
+      group-id: sync-consumer-eu

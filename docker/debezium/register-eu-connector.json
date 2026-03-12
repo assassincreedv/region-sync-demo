@@ -1,0 +1,24 @@
+{
+  "name": "mysql-eu-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+    "database.hostname": "mysql-eu",
+    "database.port": "3306",
+    "database.user": "root",
+    "database.password": "root",
+    "database.server.id": "2",
+    "topic.prefix": "eu.cdc",
+    "database.include.list": "app_eu",
+    "table.include.list": "app_eu.companies",
+    "schema.history.internal.kafka.bootstrap.servers": "kafka:29092",
+    "schema.history.internal.kafka.topic": "schema-changes.app_eu",
+    "transforms": "addSourceRegion,unwrap",
+    "transforms.addSourceRegion.type": "org.apache.kafka.connect.transforms.InsertField$Value",
+    "transforms.addSourceRegion.static.field": "__source_region",
+    "transforms.addSourceRegion.static.value": "EU",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.add.fields": "op,table,source.ts_ms",
+    "transforms.unwrap.delete.handling.mode": "rewrite",
+    "transforms.unwrap.drop.tombstones": "true"
+  }
+}
