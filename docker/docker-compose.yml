@@ -1,0 +1,186 @@
+version: "3.9"
+
+networks:
+  sync-net:
+    driver: bridge
+
+services:
+
+  # ─── MySQL NA ────────────────────────────────────────────────────────────────
+  mysql-na:
+    image: mysql:8.0
+    container_name: mysql-na
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app_na
+    command: >
+      --server-id=1
+      --log-bin=mysql-bin
+      --binlog-format=ROW
+      --binlog-row-image=FULL
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-na-data:/var/lib/mysql
+    networks:
+      - sync-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ─── MySQL EU ────────────────────────────────────────────────────────────────
+  mysql-eu:
+    image: mysql:8.0
+    container_name: mysql-eu
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app_eu
+    command: >
+      --server-id=2
+      --log-bin=mysql-bin
+      --binlog-format=ROW
+      --binlog-row-image=FULL
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-eu-data:/var/lib/mysql
+    networks:
+      - sync-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ─── Zookeeper ───────────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - sync-net
+
+  # ─── Kafka ───────────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+    networks:
+      - sync-net
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ─── Kafka Connect (Debezium) ─────────────────────────────────────────────────
+  kafka-connect:
+    image: debezium/connect:2.7
+    container_name: kafka-connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mysql-na:
+        condition: service_healthy
+      mysql-eu:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect-configs
+      OFFSET_STORAGE_TOPIC: connect-offsets
+      STATUS_STORAGE_TOPIC: connect-status
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+    ports:
+      - "8083:8083"
+    networks:
+      - sync-net
+
+  # ─── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - sync-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Application NA ──────────────────────────────────────────────────────────
+  app-na:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: app-na
+    depends_on:
+      mysql-na:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: na
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-na:3306/app_na?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDISSON_ADDRESS: redis://redis:6379
+    ports:
+      - "8080:8080"
+    networks:
+      - sync-net
+
+  # ─── Application EU ──────────────────────────────────────────────────────────
+  app-eu:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: app-eu
+    depends_on:
+      mysql-eu:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: eu
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-eu:3306/app_eu?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDISSON_ADDRESS: redis://redis:6379
+    ports:
+      - "8081:8080"
+    networks:
+      - sync-net
+
+volumes:
+  mysql-na-data:
+  mysql-eu-data:
