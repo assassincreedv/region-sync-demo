@@ -19,6 +19,8 @@ sync-topics:
   dead-letter-topic: sync.dlt.eu
 
 spring:
+  datasource:
+    url: jdbc:mysql://localhost:3307/app_eu?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
   kafka:
     consumer:
       group-id: sync-consumer-eu
