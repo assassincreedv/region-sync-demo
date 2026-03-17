@@ -61,17 +61,17 @@ A production-grade **CDC (Change Data Capture) + Kafka bidirectional cross-regio
 
 ## Tech Stack
 
-| Component         | Technology                            |
-|-------------------|---------------------------------------|
-| Framework         | Spring Boot 3.3.5, Java 21            |
-| CDC               | Debezium 2.7 (MySQL connector)        |
-| Messaging         | Apache Kafka (Confluent 7.5.0)        |
-| Replication       | Kafka MirrorMaker 2                   |
-| Database          | MySQL 8.0 (per region)                |
-| Distributed Cache | Redis 7, Redisson 3.27.2              |
-| Schema Migration  | Flyway                                |
-| Metrics           | Micrometer + Prometheus               |
-| Build             | Maven 3.x                             |
+| Component         | Technology                     |
+|-------------------|--------------------------------|
+| Framework         | Spring Boot 3.3.5, Java 21     |
+| CDC               | Debezium 3.0 (MySQL connector) |
+| Messaging         | Apache Kafka (Confluent 7.5.0) |
+| Replication       | Kafka MirrorMaker 2            |
+| Database          | MySQL 8.0 (per region)         |
+| Distributed Cache | Redis 7, Redisson 3.27.2       |
+| Schema Migration  | Flyway                         |
+| Metrics           | Micrometer + Prometheus        |
+| Build             | Maven 3.x                      |
 
 ---
 
