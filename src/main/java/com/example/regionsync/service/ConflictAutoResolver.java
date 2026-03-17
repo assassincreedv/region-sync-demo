@@ -73,6 +73,12 @@ public class ConflictAutoResolver {
                     currentRegion, remoteRegion, conflict.getBusinessKey());
             companyRepository.findByCompanyCode(conflict.getBusinessKey())
                     .ifPresent(company -> {
+                        // Mark the entity so that the resulting CDC events (the
+                        // update + the rewritten delete) carry synced_from_remote=true.
+                        // The remote region's consumer will then skip them, preventing
+                        // the winning side from also deleting its copy.
+                        company.setSyncedFromRemote(true);
+                        companyRepository.saveAndFlush(company);
                         companyRepository.delete(company);
                         log.info("Deleted local duplicate company: {}", conflict.getBusinessKey());
                     });

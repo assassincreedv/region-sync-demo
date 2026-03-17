@@ -50,6 +50,12 @@ public class CompanyService {
         if (updates.getContactEmail() != null) existing.setContactEmail(updates.getContactEmail());
         if (updates.getStatus() != null) existing.setStatus(updates.getStatus());
         // company_code is the business key and must not be changed after creation
+        // Reset syncedFromRemote so this local change is picked up by remote
+        // consumers. Without this, an entity previously synced from remote would
+        // keep synced_from_remote=true, and the CDC event from this local update
+        // would be incorrectly skipped by the remote region.
+        existing.setSyncedFromRemote(false);
+        existing.setSourceRegion(syncProperties.getCurrentRegion());
         return companyRepository.save(existing);
     }
 

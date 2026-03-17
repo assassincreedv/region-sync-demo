@@ -82,6 +82,23 @@ public class SyncEventConsumer {
                 return;
             }
 
+            // 2b. Loop prevention: skip if this change was applied by the sync system.
+            // When the sync consumer or rejection handler writes to the local DB,
+            // it sets synced_from_remote=true. Debezium captures that write and
+            // produces a CDC event whose payload contains synced_from_remote=true.
+            // Re-processing such events would create an infinite Kafka update loop.
+            Object syncedFlag = event.getPayload().get("synced_from_remote");
+            if (syncedFlag != null) {
+                String flagStr = syncedFlag.toString();
+                if ("true".equalsIgnoreCase(flagStr) || "1".equals(flagStr)) {
+                    log.debug("Loop prevention: skipping sync-applied event for businessKey={} eventId={}",
+                            event.getBusinessKey(), event.getEventId());
+                    syncMetrics.incrementSkipped();
+                    ack.acknowledge();
+                    return;
+                }
+            }
+
             // 3. Idempotency: skip if already processed
             if (eventDeduplicationService.isDuplicate(event.getEventId())) {
                 log.debug("Duplicate event, skipping: eventId={}", event.getEventId());

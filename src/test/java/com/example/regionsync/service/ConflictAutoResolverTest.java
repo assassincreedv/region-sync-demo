@@ -74,8 +74,12 @@ class ConflictAutoResolverTest {
 
         conflictAutoResolver.autoResolve();
 
-        // NA should yield: delete the local duplicate
-        verify(companyRepository).delete(company);
+        // NA should yield: mark synced_from_remote=true, flush, then delete
+        assertTrue(company.isSyncedFromRemote(),
+                "Entity must be marked synced_from_remote before deletion to prevent CDC echo");
+        var inOrder = inOrder(companyRepository);
+        inOrder.verify(companyRepository).saveAndFlush(company);
+        inOrder.verify(companyRepository).delete(company);
         assertTrue(conflict.isResolved());
         assertEquals(ConflictResolutionAction.AUTO_YIELD.name(), conflict.getResolutionAction());
     }

@@ -69,6 +69,7 @@ public class SyncApplyService {
                 Company existing = opt.get();
                 mapper.updateEntity(existing, event.getPayload());
                 existing.setSyncedFromRemote(true);
+                existing.setSourceRegion(event.getSourceRegion());
                 companyRepository.save(existing);
             }
 
