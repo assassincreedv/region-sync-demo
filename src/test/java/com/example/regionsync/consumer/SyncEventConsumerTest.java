@@ -97,6 +97,7 @@ class SyncEventConsumerTest {
         payload.put("synced_from_remote", "true");
         payload.put("source_region", "EU");
         payload.put("company_code", "LOOP-CO");
+        payload.put("__table", "companies");
 
         SyncEvent event = SyncEvent.builder()
                 .eventId("companies:LOOP-CO:1234567890")
@@ -123,6 +124,7 @@ class SyncEventConsumerTest {
         payload.put("synced_from_remote", 1);
         payload.put("source_region", "EU");
         payload.put("company_code", "LOOP-CO");
+        payload.put("__table", "companies");
 
         SyncEvent event = SyncEvent.builder()
                 .eventId("companies:LOOP-CO:1234567890")
@@ -151,6 +153,7 @@ class SyncEventConsumerTest {
         payload.put("synced_from_remote", false);
         payload.put("source_region", "EU");
         payload.put("company_code", "REAL-CO");
+        payload.put("__table", "companies");
 
         SyncEvent event = SyncEvent.builder()
                 .eventId("companies:REAL-CO:1234567890")
@@ -197,6 +200,7 @@ class SyncEventConsumerTest {
         payload.put("synced_from_remote", false);
         payload.put("source_region", "NA");
         payload.put("company_code", "OWN-CO");
+        payload.put("__table", "companies");
 
         SyncEvent event = SyncEvent.builder()
                 .eventId("companies:OWN-CO:1234567890")
