@@ -102,7 +102,7 @@ services:
 
   # ─── Kafka Connect (Debezium) ─────────────────────────────────────────────────
   kafka-connect:
-    image: debezium/connect:2.7
+    image: debezium/connect:3.0.0.Final
     container_name: kafka-connect
     depends_on:
       kafka:
@@ -161,7 +161,8 @@ services:
       SPRING_PROFILES_ACTIVE: na
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql-na:3306/app_na?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      REDISSON_ADDRESS: redis://redis:6379
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
     ports:
       - "8080:8080"
     networks:
@@ -184,7 +185,8 @@ services:
       SPRING_PROFILES_ACTIVE: eu
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql-eu:3306/app_eu?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      REDISSON_ADDRESS: redis://redis:6379
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
     ports:
       - "8081:8080"
     networks:

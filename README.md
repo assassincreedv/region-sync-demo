@@ -101,23 +101,23 @@ Wait ~60 seconds for all services to be healthy.
 ```bash
 # Register NA connector
 curl -X POST http://localhost:8083/connectors \
-  -H "Content-Type: application/json" \
-  -d @docker/debezium/register-na-connector.json
+  --header "Content-Type: application/json" \
+  -data-binary '@docker/debezium/register-na-connector.json'
 
 # Register EU connector
 curl -X POST http://localhost:8083/connectors \
-  -H "Content-Type: application/json" \
-  -d @docker/debezium/register-eu-connector.json
+  -header "Content-Type: application/json" \
+  -data-binary '@docker/debezium/register-eu-connector.json'
 
 # Verify connectors are running
-curl http://localhost:8083/connectors?expand=status | jq .
+curl 'http://localhost:8083/connectors?expand=status' | jq .
 ```
 
 ### 4. Verify connector status
 
 ```bash
-curl http://localhost:8083/connectors/mysql-na-connector/status | jq .
-curl http://localhost:8083/connectors/mysql-eu-connector/status | jq .
+curl 'http://localhost:8083/connectors/mysql-na-connector/status' | jq .
+curl 'http://localhost:8083/connectors/mysql-eu-connector/status' | jq .
 ```
 
 ---

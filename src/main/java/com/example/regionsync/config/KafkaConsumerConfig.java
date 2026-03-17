@@ -1,9 +1,9 @@
 package com.example.regionsync.config;
 
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.common.serialization.StringDeserializer;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+import jakarta.annotation.PostConstruct;
+import org.apache.kafka.common.TopicPartition;
+import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
+import org.springframework.boot.ssl.SslBundles;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.annotation.EnableKafka;
@@ -23,43 +23,51 @@ import java.util.Map;
 @EnableKafka
 public class KafkaConsumerConfig {
 
-    @Autowired
-    private SyncTopicsProperties syncTopicsProperties;
+    private final SyncTopicsProperties syncTopicsProperties;
+    private final KafkaProperties kafkaProperties;
+    private final SslBundles sslBundles;
 
-    @Value("${spring.kafka.bootstrap-servers}")
-    private String bootstrapServers;
+    public KafkaConsumerConfig(SyncTopicsProperties syncTopicsProperties,
+                               KafkaProperties kafkaProperties,
+                               SslBundles sslBundles) {
+        this.syncTopicsProperties = syncTopicsProperties;
+        this.kafkaProperties = kafkaProperties;
+        this.sslBundles = sslBundles;
+    }
+
+    @PostConstruct
+    public void logKafkaBootstrap() {
+        System.out.println("kafkaProperties bootstrap = " + kafkaProperties.getBootstrapServers());
+    }
 
     @Bean
     public ConsumerFactory<String, String> consumerFactory() {
-        Map<String, Object> props = new HashMap<>();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        Map<String, Object> props =
+                new HashMap<>(kafkaProperties.buildConsumerProperties(sslBundles));
         return new DefaultKafkaConsumerFactory<>(props);
     }
 
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(
+            ConsumerFactory<String, String> consumerFactory,
             KafkaTemplate<String, String> kafkaTemplate) {
 
         ConcurrentKafkaListenerContainerFactory<String, String> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
 
-        factory.setConsumerFactory(consumerFactory());
+        factory.setConsumerFactory(consumerFactory);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
 
         ExponentialBackOff backOff = new ExponentialBackOff(1000L, 2.0);
         backOff.setMaxAttempts(5);
         backOff.setMaxInterval(32000L);
 
-        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate,
-                (record, ex) -> new org.apache.kafka.common.TopicPartition(
-                        syncTopicsProperties.getDeadLetterTopic(), 0));
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
+                kafkaTemplate,
+                (record, ex) -> new TopicPartition(syncTopicsProperties.getDeadLetterTopic(), 0)
+        );
 
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
-        factory.setCommonErrorHandler(errorHandler);
-
+        factory.setCommonErrorHandler(new DefaultErrorHandler(recoverer, backOff));
         return factory;
     }
 }
