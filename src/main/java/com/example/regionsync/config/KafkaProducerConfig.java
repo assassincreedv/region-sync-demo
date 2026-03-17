@@ -1,8 +1,8 @@
 package com.example.regionsync.config;
 
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.serialization.StringSerializer;
-import org.springframework.beans.factory.annotation.Value;
+import jakarta.annotation.PostConstruct;
+import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
+import org.springframework.boot.ssl.SslBundles;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
@@ -15,22 +15,29 @@ import java.util.Map;
 @Configuration
 public class KafkaProducerConfig {
 
-    @Value("${spring.kafka.bootstrap-servers}")
-    private String bootstrapServers;
+    private final KafkaProperties kafkaProperties;
+    private final SslBundles sslBundles;
+
+    public KafkaProducerConfig(KafkaProperties kafkaProperties, SslBundles sslBundles) {
+        this.kafkaProperties = kafkaProperties;
+        this.sslBundles = sslBundles;
+    }
+
+    @PostConstruct
+    public void logKafkaBootstrap() {
+        System.out.println("kafkaProperties bootstrap = " + kafkaProperties.getBootstrapServers());
+    }
 
     @Bean
     public ProducerFactory<String, String> producerFactory() {
-        Map<String, Object> props = new HashMap<>();
-        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        props.put(ProducerConfig.ACKS_CONFIG, "all");
-        props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+        Map<String, Object> props =
+                new HashMap<>(kafkaProperties.buildProducerProperties(sslBundles));
         return new DefaultKafkaProducerFactory<>(props);
     }
 
     @Bean
-    public KafkaTemplate<String, String> kafkaTemplate() {
-        return new KafkaTemplate<>(producerFactory());
+    public KafkaTemplate<String, String> kafkaTemplate(
+            ProducerFactory<String, String> producerFactory) {
+        return new KafkaTemplate<>(producerFactory);
     }
 }

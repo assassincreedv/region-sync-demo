@@ -2,9 +2,13 @@ spring:
   application:
     name: region-sync-demo
   datasource:
-    username: root
-    password: root
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -21,7 +25,7 @@ spring:
     serialization:
       write-dates-as-timestamps: false
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
@@ -30,9 +34,6 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-
-redisson:
-  address: redis://localhost:6379
 
 management:
   endpoints:
