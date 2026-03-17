@@ -30,8 +30,8 @@ public class ConflictRecordService {
                 .conflictId(rejection.getRejectionId())
                 .tableName(rejection.getTableName())
                 .businessKey(rejection.getBusinessKey())
-                .localRegion(rejection.getSourceRegion())
-                .remoteRegion(rejection.getTargetRegion())
+                .localRegion(rejection.getTargetRegion())
+                .remoteRegion(rejection.getSourceRegion())
                 .rejectionReason(rejection.getRejectionReason() != null
                         ? rejection.getRejectionReason().name() : null)
                 .conflictDetail(rejection.getConflictDetail())
