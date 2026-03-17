@@ -4,6 +4,7 @@ import com.example.regionsync.config.SyncProperties;
 import com.example.regionsync.model.entity.Company;
 import com.example.regionsync.model.entity.SyncConflictLog;
 import com.example.regionsync.model.enums.ConflictResolutionAction;
+import com.example.regionsync.model.enums.SyncStatus;
 import com.example.regionsync.repository.CompanyRepository;
 import com.example.regionsync.repository.SyncConflictLogRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,8 +18,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -85,9 +85,11 @@ class ConflictAutoResolverTest {
     }
 
     @Test
-    void autoResolve_euWinsOverNa_keepsLocalEntity() {
+    void autoResolve_euWinsOverNa_clearsConflictStatusAndResyncs() {
         // Scenario: EU receives a conflict where remoteRegion=NA, localRegion=EU
-        // Since EU < NA lexicographically, EU wins, so EU should keep its data
+        // Since EU < NA lexicographically, EU wins, so EU should keep its data,
+        // clear the CONFLICT status, and set syncedFromRemote=false so that
+        // the CDC event re-syncs the entity to the losing region (NA).
         when(syncProperties.getCurrentRegion()).thenReturn("EU");
 
         SyncConflictLog conflict = SyncConflictLog.builder()
@@ -103,10 +105,23 @@ class ConflictAutoResolverTest {
         when(syncConflictLogRepository.findUnresolvedByReasonBefore(eq("DUPLICATE_ENTITY"), any()))
                 .thenReturn(List.of(conflict));
 
+        Company company = Company.builder().companyCode("CONFLICT-CO").build();
+        company.setSyncStatus(SyncStatus.CONFLICT);
+        company.setSyncConflictDetail("Local entity already exists");
+        company.setSyncedFromRemote(true);
+        when(companyRepository.findByCompanyCode("CONFLICT-CO")).thenReturn(Optional.of(company));
+
         conflictAutoResolver.autoResolve();
 
-        // EU should win: no deletion
+        // EU should win: no deletion, but entity CONFLICT status must be cleared
         verify(companyRepository, never()).delete(any());
+        verify(companyRepository).save(company);
+        assertEquals(SyncStatus.NORMAL, company.getSyncStatus(),
+                "Winning entity must have syncStatus cleared to NORMAL");
+        assertNull(company.getSyncConflictDetail(),
+                "Winning entity must have syncConflictDetail cleared");
+        assertFalse(company.isSyncedFromRemote(),
+                "Winning entity must set syncedFromRemote=false to trigger CDC re-sync");
         assertTrue(conflict.isResolved());
         assertEquals(ConflictResolutionAction.AUTO_WIN.name(), conflict.getResolutionAction());
     }
