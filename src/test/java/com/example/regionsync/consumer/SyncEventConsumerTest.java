@@ -116,7 +116,7 @@ class SyncEventConsumerTest {
 
         consumer.consume(json, ack);
 
-        verify(syncMetrics, atLeastOnce()).incrementSkipped();
+        verify(syncMetrics).incrementSkipped();
         verify(ack).acknowledge();
         verifyNoInteractions(syncApplyService);
     }
