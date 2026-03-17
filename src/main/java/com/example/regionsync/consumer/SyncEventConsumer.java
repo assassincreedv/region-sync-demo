@@ -82,6 +82,20 @@ public class SyncEventConsumer {
                 return;
             }
 
+            // 2b. Bounce-back prevention: skip if the record's source_region column
+            // matches the current region. This catches cases where a synced record
+            // triggers Debezium in the remote DB and bounces back to the originator.
+            Object payloadSourceRegion = event.getPayload().get("source_region");
+            if (payloadSourceRegion != null
+                    && syncProperties.getCurrentRegion().equals(payloadSourceRegion.toString())) {
+                log.debug("Bounce-back prevention: skipping event where payload source_region={} "
+                                + "matches current region={}, eventId={}",
+                        payloadSourceRegion, syncProperties.getCurrentRegion(), event.getEventId());
+                syncMetrics.incrementSkipped();
+                ack.acknowledge();
+                return;
+            }
+
             // 3. Idempotency: skip if already processed
             if (eventDeduplicationService.isDuplicate(event.getEventId())) {
                 log.debug("Duplicate event, skipping: eventId={}", event.getEventId());

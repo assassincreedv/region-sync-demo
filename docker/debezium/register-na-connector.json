@@ -12,7 +12,7 @@
     "table.include.list": "app_na.companies",
     "schema.history.internal.kafka.bootstrap.servers": "kafka:29092",
     "schema.history.internal.kafka.topic": "schema-changes.app_na",
-    "transforms": "addSourceRegion,unwrap",
+    "transforms": "unwrap,addSourceRegion",
     "transforms.addSourceRegion.type": "org.apache.kafka.connect.transforms.InsertField$Value",
     "transforms.addSourceRegion.static.field": "__source_region",
     "transforms.addSourceRegion.static.value": "NA",
