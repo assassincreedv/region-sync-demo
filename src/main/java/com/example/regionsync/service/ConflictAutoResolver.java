@@ -56,6 +56,12 @@ public class ConflictAutoResolver {
     private void resolveConflict(SyncConflictLog conflict, String currentRegion) {
         String remoteRegion = conflict.getRemoteRegion();
 
+        if (currentRegion.equals(remoteRegion)) {
+            log.warn("Auto-resolve: skipping conflict with remoteRegion equal to currentRegion={} for businessKey={}",
+                    currentRegion, conflict.getBusinessKey());
+            return;
+        }
+
         // Region priority: determined lexicographically (EU < NA), so EU always wins.
         // This ensures a deterministic, configuration-free tie-breaker consistent across
         // all nodes — no external coordination required.

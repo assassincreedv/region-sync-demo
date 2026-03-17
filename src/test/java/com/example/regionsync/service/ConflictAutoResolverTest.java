@@ -109,10 +109,8 @@ class ConflictAutoResolverTest {
 
     @Test
     void autoResolve_neverYieldsToSelf() {
-        // This test verifies the bug scenario: if remoteRegion == currentRegion,
-        // the resolver must NOT delete the local entity (this was the original bug).
-        // With the fix in ConflictRecordService this scenario should not occur,
-        // but this test documents the expected behavior.
+        // This test verifies the defensive guard: if remoteRegion == currentRegion,
+        // the resolver must NOT delete the local entity and must skip the conflict.
         when(syncProperties.getCurrentRegion()).thenReturn("EU");
 
         SyncConflictLog conflict = SyncConflictLog.builder()
@@ -130,10 +128,10 @@ class ConflictAutoResolverTest {
 
         conflictAutoResolver.autoResolve();
 
-        // When regions are equal, compareTo returns 0, which is not < 0,
-        // so currentRegionWins = false and it yields. This is the bug scenario
-        // that the ConflictRecordService fix prevents from happening.
-        // Documenting current behavior: it would yield when equal.
-        verify(companyRepository).findByCompanyCode("CONFLICT-CO");
+        // When regions are equal, the resolver should skip — no deletion, no resolution
+        verify(companyRepository, never()).findByCompanyCode(any());
+        verify(companyRepository, never()).delete(any());
+        assertEquals(false, conflict.isResolved(),
+                "Conflict should remain unresolved when regions are equal");
     }
 }
