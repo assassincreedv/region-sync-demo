@@ -26,6 +26,7 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -77,6 +78,19 @@ public class SyncEventConsumer {
             if (syncProperties.getCurrentRegion().equals(event.getSourceRegion())) {
                 log.debug("Loop prevention: skipping event from own region={} eventId={}",
                         event.getSourceRegion(), event.getEventId());
+                syncMetrics.incrementSkipped();
+                ack.acknowledge();
+                return;
+            }
+
+            // 2b. Loop prevention: skip if this change was applied by the sync system.
+            // When the sync consumer or rejection handler writes to the local DB,
+            // it sets synced_from_remote=true. Debezium captures that write and
+            // produces a CDC event whose payload contains synced_from_remote=true.
+            // Re-processing such events would create an infinite Kafka update loop.
+            if (isSyncedFromRemote(event.getPayload())) {
+                log.debug("Loop prevention: skipping sync-applied event for businessKey={} eventId={}",
+                        event.getBusinessKey(), event.getEventId());
                 syncMetrics.incrementSkipped();
                 ack.acknowledge();
                 return;
@@ -247,5 +261,26 @@ public class SyncEventConsumer {
             if (strategy != null) return strategy;
         }
         return "FIRST_WRITER_WINS";
+    }
+
+    /**
+     * Checks the {@code synced_from_remote} field in a CDC payload.
+     * The value may arrive as a Java {@link Boolean}, a {@link Number}
+     * (MySQL TINYINT 0/1), or a {@link String} depending on the
+     * Debezium connector configuration and Kafka serialization.
+     */
+    static boolean isSyncedFromRemote(Map<String, Object> payload) {
+        Object flag = payload.get("synced_from_remote");
+        if (flag == null) {
+            return false;
+        }
+        if (flag instanceof Boolean b) {
+            return b;
+        }
+        if (flag instanceof Number n) {
+            return n.intValue() != 0;
+        }
+        String s = flag.toString();
+        return "true".equalsIgnoreCase(s) || "1".equals(s);
     }
 }

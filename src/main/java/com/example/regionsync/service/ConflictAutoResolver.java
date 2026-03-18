@@ -3,6 +3,7 @@ package com.example.regionsync.service;
 import com.example.regionsync.config.SyncProperties;
 import com.example.regionsync.model.entity.SyncConflictLog;
 import com.example.regionsync.model.enums.ConflictResolutionAction;
+import com.example.regionsync.model.enums.SyncStatus;
 import com.example.regionsync.repository.CompanyRepository;
 import com.example.regionsync.repository.SyncConflictLogRepository;
 import lombok.RequiredArgsConstructor;
@@ -73,6 +74,12 @@ public class ConflictAutoResolver {
                     currentRegion, remoteRegion, conflict.getBusinessKey());
             companyRepository.findByCompanyCode(conflict.getBusinessKey())
                     .ifPresent(company -> {
+                        // Mark the entity so that the resulting CDC events (the
+                        // update + the rewritten delete) carry synced_from_remote=true.
+                        // The remote region's consumer will then skip them, preventing
+                        // the winning side from also deleting its copy.
+                        company.setSyncedFromRemote(true);
+                        companyRepository.saveAndFlush(company);
                         companyRepository.delete(company);
                         log.info("Deleted local duplicate company: {}", conflict.getBusinessKey());
                     });
@@ -82,6 +89,18 @@ public class ConflictAutoResolver {
         } else {
             log.info("Auto-resolve: current region {} wins over {} for businessKey={}",
                     currentRegion, remoteRegion, conflict.getBusinessKey());
+            // Clear the CONFLICT status on the winning entity and reset
+            // syncedFromRemote so that the resulting CDC event propagates to
+            // the losing region, which has already deleted its copy and needs
+            // this update to re-create the entity.
+            companyRepository.findByCompanyCode(conflict.getBusinessKey())
+                    .ifPresent(company -> {
+                        company.setSyncStatus(SyncStatus.NORMAL);
+                        company.setSyncConflictDetail(null);
+                        company.setSyncedFromRemote(false);
+                        companyRepository.save(company);
+                        log.info("Cleared CONFLICT status on winning company: {}", conflict.getBusinessKey());
+                    });
             conflict.setResolved(true);
             conflict.setResolvedAt(LocalDateTime.now());
             conflict.setResolutionAction(ConflictResolutionAction.AUTO_WIN.name());

@@ -47,6 +47,10 @@ public class RejectionEventConsumer {
                 companyOpt.ifPresent(company -> {
                     company.setSyncStatus(SyncStatus.CONFLICT);
                     company.setSyncConflictDetail(rejection.getConflictDetail());
+                    // Mark as synced-from-remote so the resulting CDC event is
+                    // recognised as a sync echo and skipped by the remote consumer,
+                    // preventing an infinite rejection → CDC → rejection loop.
+                    company.setSyncedFromRemote(true);
                     companyRepository.save(company);
                     log.info("Marked company as CONFLICT: {}", rejection.getBusinessKey());
                 });
