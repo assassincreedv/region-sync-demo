@@ -237,13 +237,13 @@ public class SyncEventConsumer {
     private String extractTableName(String message) {
         // Lightweight extraction of __table before full JSON parse.
         // Debezium's ExtractNewRecordState adds __table to the flattened value.
-        // Using ObjectMapper here would require an extra full parse just for routing;
-        // the fast string scan is sufficient for this demo. If message format changes,
-        // replace with objectMapper.readTree(message).path("__table").asText("companies").
+        // Search for "__table": (with colon) to match only the key usage in the
+        // payload section, avoiding false matches in the schema section where
+        // __table appears as a field definition value ("field":"__table").
         try {
-            int idx = message.indexOf("\"__table\"");
+            int idx = message.indexOf("\"__table\":");
             if (idx >= 0) {
-                int start = message.indexOf("\"", idx + 9) + 1;
+                int start = message.indexOf("\"", idx + 10) + 1;
                 int end = message.indexOf("\"", start);
                 if (start > 0 && end > start) {
                     return message.substring(start, end);

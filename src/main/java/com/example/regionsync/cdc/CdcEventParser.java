@@ -49,8 +49,15 @@ public class CdcEventParser {
 
             Long sourceTimestampMs = getLong(data, "__source_ts_ms");
 
-            // 你当前消息里没有 __source_region，真实字段是 source_region
-            String sourceRegion = getString(data, "source_region");
+            // Prefer __source_region (injected by the Debezium InsertField transform)
+            // over source_region (database column).  __source_region reliably
+            // identifies which region's database the CDC event was captured from,
+            // whereas the DB column source_region may still point to the original
+            // creator region after the entity has been synced across regions.
+            String sourceRegion = getString(data, "__source_region");
+            if (sourceRegion == null || sourceRegion.isBlank()) {
+                sourceRegion = getString(data, "source_region");
+            }
 
             String businessKey = getString(data, "company_code");
 

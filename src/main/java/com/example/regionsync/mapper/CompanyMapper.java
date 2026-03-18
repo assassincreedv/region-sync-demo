@@ -22,6 +22,12 @@ public class CompanyMapper implements EntityMapper<Company> {
     @Override
     public Company fromPayload(Map<String, Object> payload) {
         Company company = new Company();
+        // Preserve the remote entity's ID so synced entities share the same
+        // primary key across regions, making cross-region traceability possible.
+        String id = getStringValue(payload, "id");
+        if (id != null) {
+            company.setId(id);
+        }
         company.setCompanyCode(getStringValue(payload, "company_code"));
         company.setName(getStringValue(payload, "name"));
         company.setAddress(getStringValue(payload, "address"));

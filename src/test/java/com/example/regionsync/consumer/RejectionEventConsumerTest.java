@@ -125,6 +125,8 @@ class RejectionEventConsumerTest {
         assertEquals(SyncStatus.NORMAL, company.getSyncStatus());
         assertNull(company.getSyncConflictDetail());
         assertFalse(company.isSyncedFromRemote());
+        assertEquals("EU", company.getSourceRegion(),
+                "Winning entity must have sourceRegion set to the current (winning) region");
 
         // Conflict should be marked resolved with AUTO_WIN
         assertTrue(conflictLog.isResolved());

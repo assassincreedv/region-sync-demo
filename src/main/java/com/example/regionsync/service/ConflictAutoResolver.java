@@ -98,6 +98,7 @@ public class ConflictAutoResolver {
                         company.setSyncStatus(SyncStatus.NORMAL);
                         company.setSyncConflictDetail(null);
                         company.setSyncedFromRemote(false);
+                        company.setSourceRegion(currentRegion);
                         companyRepository.save(company);
                         log.info("Cleared CONFLICT status on winning company: {}", conflict.getBusinessKey());
                     });

@@ -122,6 +122,8 @@ class ConflictAutoResolverTest {
                 "Winning entity must have syncConflictDetail cleared");
         assertFalse(company.isSyncedFromRemote(),
                 "Winning entity must set syncedFromRemote=false to trigger CDC re-sync");
+        assertEquals("EU", company.getSourceRegion(),
+                "Winning entity must have sourceRegion set to the current (winning) region");
         assertTrue(conflict.isResolved());
         assertEquals(ConflictResolutionAction.AUTO_WIN.name(), conflict.getResolutionAction());
     }
