@@ -1,5 +1,6 @@
 package com.example.regionsync.service;
 
+import com.example.regionsync.api.DuplicateEntityException;
 import com.example.regionsync.config.SyncProperties;
 import com.example.regionsync.model.entity.Company;
 import com.example.regionsync.repository.CompanyRepository;
@@ -21,6 +22,11 @@ public class CompanyService {
     private final SyncProperties syncProperties;
 
     public Company create(Company company) {
+        if (company.getCompanyCode() != null
+                && companyRepository.findByCompanyCode(company.getCompanyCode()).isPresent()) {
+            throw new DuplicateEntityException(
+                    "Company with companyCode '" + company.getCompanyCode() + "' already exists");
+        }
         company.setId(UUID.randomUUID().toString());
         company.setSourceRegion(syncProperties.getCurrentRegion());
         company.setSyncedFromRemote(false);
@@ -45,6 +51,16 @@ public class CompanyService {
     public Company update(String id, Company updates) {
         Company existing = companyRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Company not found with id: " + id));
+        // Guard against a request that supplies a companyCode belonging to another entity
+        if (updates.getCompanyCode() != null
+                && !updates.getCompanyCode().equals(existing.getCompanyCode())) {
+            companyRepository.findByCompanyCode(updates.getCompanyCode()).ifPresent(other -> {
+                if (!other.getId().equals(id)) {
+                    throw new DuplicateEntityException(
+                            "Company with companyCode '" + updates.getCompanyCode() + "' already exists");
+                }
+            });
+        }
         if (updates.getName() != null) existing.setName(updates.getName());
         if (updates.getAddress() != null) existing.setAddress(updates.getAddress());
         if (updates.getContactEmail() != null) existing.setContactEmail(updates.getContactEmail());
