@@ -74,11 +74,14 @@ public class RejectionEventConsumer {
     /**
      * Immediately resolves a DUPLICATE_ENTITY conflict using lexicographic
      * region comparison (same logic as {@code ConflictAutoResolver}).
-     * The region with the smaller name wins (e.g. EU &lt; NA → EU wins).
+     * The region with the smaller name wins (e.g. {@code EU < NA} → EU wins).
      */
     private void autoResolveImmediately(SyncRejection rejection) {
         String currentRegion = syncProperties.getCurrentRegion();
-        // sourceRegion is the region that sent the rejection (remote)
+        // In a SyncRejection, sourceRegion is the region that detected the
+        // duplicate and sent the rejection back. From the perspective of
+        // *this* consumer (running on the targetRegion), the sourceRegion
+        // is the remote side.
         String remoteRegion = rejection.getSourceRegion();
 
         if (currentRegion.equals(remoteRegion)) {

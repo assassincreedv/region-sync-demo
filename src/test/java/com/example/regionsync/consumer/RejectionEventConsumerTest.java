@@ -48,7 +48,10 @@ class RejectionEventConsumerTest {
 
     @Test
     void consume_duplicateEntity_naYieldsToEu_deletesLocalDuplicate() throws Exception {
-        // NA receives a DUPLICATE_ENTITY rejection from EU. Since EU < NA, NA yields.
+        // Scenario: NA sent a sync event that EU rejected (DUPLICATE_ENTITY).
+        // EU sends the rejection back with sourceRegion=EU, targetRegion=NA.
+        // This consumer runs on NA (currentRegion=NA). Since EU < NA
+        // lexicographically, NA must yield and delete its local duplicate.
         SyncRejection rejection = SyncRejection.builder()
                 .rejectionId("rej-1")
                 .tableName("companies")
