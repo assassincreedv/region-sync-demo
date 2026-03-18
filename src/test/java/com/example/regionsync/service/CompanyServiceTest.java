@@ -3,6 +3,7 @@ package com.example.regionsync.service;
 import com.example.regionsync.api.DuplicateEntityException;
 import com.example.regionsync.config.SyncProperties;
 import com.example.regionsync.model.entity.Company;
+import com.example.regionsync.model.enums.ConflictResolutionAction;
 import com.example.regionsync.repository.CompanyRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +17,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,6 +28,9 @@ class CompanyServiceTest {
 
     @Mock
     private SyncProperties syncProperties;
+
+    @Mock
+    private ConflictRecordService conflictRecordService;
 
     @InjectMocks
     private CompanyService companyService;
@@ -53,6 +58,7 @@ class CompanyServiceTest {
     void create_shouldThrowDuplicateEntityExceptionWhenCompanyCodeExists() {
         Company existing = Company.builder().companyCode("DUP-CO").name("Existing").build();
         existing.setId("existing-id");
+        existing.setSourceRegion("NA");
         when(companyRepository.findByCompanyCode("DUP-CO")).thenReturn(Optional.of(existing));
 
         Company newCompany = Company.builder().companyCode("DUP-CO").name("Duplicate").build();
@@ -61,6 +67,39 @@ class CompanyServiceTest {
                 () -> companyService.create(newCompany));
         assertTrue(ex.getMessage().contains("DUP-CO"));
         verify(companyRepository, never()).save(any());
+        // Conflict and event should be recorded
+        verify(conflictRecordService).recordResolvedConflict(
+                eq("companies"), eq("DUP-CO"), eq("NA"), eq("NA"),
+                eq("DUPLICATE_ENTITY"), any(), eq(ConflictResolutionAction.AUTO_WIN));
+        verify(conflictRecordService).recordEventDirect(
+                eq("companies"), eq("CREATE"), eq("DUP-CO"), eq("NA"),
+                eq("REJECTED"), any());
+    }
+
+    @Test
+    void create_shouldIncludeRemoteRegionInErrorWhenDuplicateFromRemote() {
+        // Scenario: EU synced a company to NA; user on NA tries to create
+        // the same companyCode.  The error should mention the EU region.
+        Company existing = Company.builder().companyCode("REMOTE-CO").name("Remote Co").build();
+        existing.setId("existing-id");
+        existing.setSourceRegion("EU");
+        when(companyRepository.findByCompanyCode("REMOTE-CO")).thenReturn(Optional.of(existing));
+
+        Company newCompany = Company.builder().companyCode("REMOTE-CO").name("New Remote Co").build();
+
+        DuplicateEntityException ex = assertThrows(DuplicateEntityException.class,
+                () -> companyService.create(newCompany));
+        assertTrue(ex.getMessage().contains("EU region"),
+                "Error must mention the remote region; got: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("REMOTE-CO"));
+        verify(companyRepository, never()).save(any());
+        // Conflict and event should be recorded with EU as remoteRegion
+        verify(conflictRecordService).recordResolvedConflict(
+                eq("companies"), eq("REMOTE-CO"), eq("NA"), eq("EU"),
+                eq("DUPLICATE_ENTITY"), any(), eq(ConflictResolutionAction.AUTO_WIN));
+        verify(conflictRecordService).recordEventDirect(
+                eq("companies"), eq("CREATE"), eq("REMOTE-CO"), eq("NA"),
+                eq("REJECTED"), any());
     }
 
     @Test

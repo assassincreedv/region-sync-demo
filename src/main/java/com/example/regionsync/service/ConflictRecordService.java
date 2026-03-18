@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -68,5 +69,51 @@ public class ConflictRecordService {
         log.setResolvedAt(LocalDateTime.now());
         log.setResolutionAction(action.name());
         return syncConflictLogRepository.save(log);
+    }
+
+    /**
+     * Records a conflict detected at the API level (e.g. duplicate company
+     * creation attempt against an entity synced from a remote region).
+     * The conflict is immediately resolved because the existing (remote)
+     * entity wins and the local creation is rejected.
+     */
+    public void recordResolvedConflict(String tableName, String businessKey,
+                                       String localRegion, String remoteRegion,
+                                       String rejectionReason, String detail,
+                                       ConflictResolutionAction action) {
+        SyncConflictLog conflictLog = SyncConflictLog.builder()
+                .conflictId(UUID.randomUUID().toString())
+                .tableName(tableName)
+                .businessKey(businessKey)
+                .localRegion(localRegion)
+                .remoteRegion(remoteRegion)
+                .rejectionReason(rejectionReason)
+                .conflictDetail(detail)
+                .resolutionAction(action.name())
+                .resolved(true)
+                .resolvedAt(LocalDateTime.now())
+                .build();
+        syncConflictLogRepository.save(conflictLog);
+        log.info("Recorded resolved conflict: table={} businessKey={} localRegion={} remoteRegion={} action={}",
+                tableName, businessKey, localRegion, remoteRegion, action);
+    }
+
+    /**
+     * Records a sync event directly, for cases where no {@link SyncEvent}
+     * object is available (e.g. API-level duplicate detection).
+     */
+    public void recordEventDirect(String tableName, String operationType,
+                                  String businessKey, String sourceRegion,
+                                  String action, String detail) {
+        SyncEventLog eventLog = SyncEventLog.builder()
+                .eventId("api:" + tableName + ":" + businessKey + ":" + System.currentTimeMillis())
+                .tableName(tableName)
+                .operationType(operationType)
+                .businessKey(businessKey)
+                .sourceRegion(sourceRegion)
+                .action(action)
+                .detail(detail)
+                .build();
+        syncEventLogRepository.save(eventLog);
     }
 }

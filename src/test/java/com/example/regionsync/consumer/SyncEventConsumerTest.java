@@ -32,6 +32,7 @@ import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -218,6 +219,60 @@ class SyncEventConsumerTest {
 
         verify(syncApplyService, never()).applyUpdate(any(), any());
         verify(syncMetrics).incrementSkipped();
+        verify(ack).acknowledge();
+    }
+
+    @Test
+    void consume_createRejected_recordsConflictLocally() {
+        // When a remote CREATE is rejected because a local entity exists,
+        // the conflict should be recorded in sync_conflict_log on the
+        // rejecting side.
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("synced_from_remote", false);
+        payload.put("source_region", "EU");
+        payload.put("company_code", "DUP-CO");
+        payload.put("__table", "companies");
+
+        SyncEvent event = SyncEvent.builder()
+                .eventId("companies:DUP-CO:1234567890")
+                .tableName("companies")
+                .operationType(OperationType.CREATE)
+                .businessKey("DUP-CO")
+                .sourceRegion("EU")
+                .payload(payload)
+                .remoteVersion(0)
+                .build();
+
+        when(cdcEventParser.parse(anyString(), anyString())).thenReturn(Optional.of(event));
+        when(eventDeduplicationService.isDuplicate(anyString())).thenReturn(false);
+
+        EntityMapper<?> mapper = mock(EntityMapper.class);
+        when(entityMapperRegistry.findMapper("companies")).thenReturn(Optional.of(mapper));
+
+        ConflictStrategy strategy = mock(ConflictStrategy.class);
+        when(conflictStrategyFactory.getStrategy(anyString())).thenReturn(strategy);
+
+        // Local entity exists — CREATE should be rejected
+        when(companyRepository.findByCompanyCode("DUP-CO")).thenReturn(
+                Optional.of(Company.builder().companyCode("DUP-CO").build()));
+        when(strategy.shouldAcceptCreate(any(), eq(true))).thenReturn(false);
+
+        // GlobalLockService must run the lambda synchronously
+        doAnswer(inv -> {
+            Runnable action = inv.getArgument(1);
+            action.run();
+            return null;
+        }).when(globalLockService).executeWithLock(anyString(), any(Runnable.class));
+
+        consumer.consume("{\"__table\":\"companies\"}", ack);
+
+        // Verify the conflict is recorded locally via recordResolvedConflict
+        verify(conflictRecordService).recordResolvedConflict(
+                eq("companies"), eq("DUP-CO"), eq("NA"), eq("EU"),
+                eq("DUPLICATE_ENTITY"), anyString(),
+                eq(com.example.regionsync.model.enums.ConflictResolutionAction.AUTO_WIN));
+        verify(syncRejectionService).sendRejection(any());
+        verify(syncMetrics).incrementConflicts();
         verify(ack).acknowledge();
     }
 }

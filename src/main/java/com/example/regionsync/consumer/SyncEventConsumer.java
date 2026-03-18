@@ -178,6 +178,16 @@ public class SyncEventConsumer {
                         log.warn("CREATE rejected: localExists={} for businessKey={}", localExists, event.getBusinessKey());
                         sendRejection(event, RejectionReason.DUPLICATE_ENTITY,
                                 "Local entity already exists", null);
+                        // Record the conflict locally so sync_conflict_log has data
+                        // on the rejecting side as well
+                        conflictRecordService.recordResolvedConflict(
+                                event.getTableName(),
+                                event.getBusinessKey(),
+                                syncProperties.getCurrentRegion(),
+                                event.getSourceRegion(),
+                                "DUPLICATE_ENTITY",
+                                "Rejected remote CREATE: local entity already exists",
+                                com.example.regionsync.model.enums.ConflictResolutionAction.AUTO_WIN);
                         syncMetrics.incrementConflicts();
                         resultRef.set(SyncResult.builder()
                                 .eventId(event.getEventId())
