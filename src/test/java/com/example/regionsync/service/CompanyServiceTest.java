@@ -2,6 +2,7 @@ package com.example.regionsync.service;
 
 import com.example.regionsync.api.DuplicateEntityException;
 import com.example.regionsync.config.SyncProperties;
+import com.example.regionsync.dedup.EntityDeduplicationService;
 import com.example.regionsync.model.entity.Company;
 import com.example.regionsync.model.enums.ConflictResolutionAction;
 import com.example.regionsync.repository.CompanyRepository;
@@ -32,6 +33,9 @@ class CompanyServiceTest {
     @Mock
     private ConflictRecordService conflictRecordService;
 
+    @Mock
+    private EntityDeduplicationService entityDeduplicationService;
+
     @InjectMocks
     private CompanyService companyService;
 
@@ -44,6 +48,7 @@ class CompanyServiceTest {
     void create_shouldSucceedWhenCompanyCodeIsNew() {
         Company company = Company.builder().companyCode("NEW-CO").name("New Co").build();
         when(companyRepository.findByCompanyCode("NEW-CO")).thenReturn(Optional.empty());
+        when(entityDeduplicationService.tryRegister("companies", "NEW-CO", "NA")).thenReturn(true);
         when(companyRepository.save(any(Company.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Company result = companyService.create(company);
@@ -52,6 +57,7 @@ class CompanyServiceTest {
         assertEquals("NA", result.getSourceRegion());
         assertFalse(result.isSyncedFromRemote());
         verify(companyRepository).save(company);
+        verify(entityDeduplicationService).confirm("companies", "NEW-CO");
     }
 
     @Test
@@ -111,6 +117,43 @@ class CompanyServiceTest {
 
         assertNotNull(result.getId());
         verify(companyRepository).save(company);
+        // Redis registration should not be attempted when companyCode is null
+        verify(entityDeduplicationService, never()).tryRegister(any(), any(), any());
+    }
+
+    @Test
+    void create_shouldRejectWhenAnotherRegionAlreadyRegistered() {
+        // Scenario: EU already registered CONFLICT-CO in Redis; NA tries to create.
+        Company company = Company.builder().companyCode("CONFLICT-CO").name("Conflict Co (NA)").build();
+        when(companyRepository.findByCompanyCode("CONFLICT-CO")).thenReturn(Optional.empty());
+        when(entityDeduplicationService.tryRegister("companies", "CONFLICT-CO", "NA")).thenReturn(false);
+        when(entityDeduplicationService.getRegisteredRegion("companies", "CONFLICT-CO")).thenReturn("EU");
+
+        DuplicateEntityException ex = assertThrows(DuplicateEntityException.class,
+                () -> companyService.create(company));
+        assertTrue(ex.getMessage().contains("EU region"),
+                "Error must mention the remote region; got: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("CONFLICT-CO"));
+        verify(companyRepository, never()).save(any());
+        verify(conflictRecordService).recordResolvedConflict(
+                eq("companies"), eq("CONFLICT-CO"), eq("NA"), eq("EU"),
+                eq("DUPLICATE_ENTITY"), any(), eq(ConflictResolutionAction.AUTO_WIN));
+        verify(conflictRecordService).recordEventDirect(
+                eq("companies"), eq("CREATE"), eq("CONFLICT-CO"), eq("NA"),
+                eq("REJECTED"), any());
+    }
+
+    @Test
+    void create_shouldReleaseRegistrationWhenDbSaveFails() {
+        Company company = Company.builder().companyCode("FAIL-CO").name("Fail Co").build();
+        when(companyRepository.findByCompanyCode("FAIL-CO")).thenReturn(Optional.empty());
+        when(entityDeduplicationService.tryRegister("companies", "FAIL-CO", "NA")).thenReturn(true);
+        when(companyRepository.save(any(Company.class)))
+                .thenThrow(new RuntimeException("DB write error"));
+
+        assertThrows(RuntimeException.class, () -> companyService.create(company));
+        verify(entityDeduplicationService).release("companies", "FAIL-CO");
+        verify(entityDeduplicationService, never()).confirm(any(), any());
     }
 
     @Test

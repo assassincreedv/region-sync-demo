@@ -49,4 +49,14 @@ public class EntityDeduplicationService {
         String key = CONFIRMED_PREFIX + tableName + ":" + businessKey;
         return redissonClient.getBucket(key).isExists();
     }
+
+    /**
+     * Returns the region that registered the given business key, or {@code null}
+     * if no registration exists.
+     */
+    public String getRegisteredRegion(String tableName, String businessKey) {
+        String key = REG_PREFIX + tableName + ":" + businessKey;
+        RBucket<String> bucket = redissonClient.getBucket(key);
+        return bucket.get();
+    }
 }

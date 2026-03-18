@@ -2,11 +2,13 @@ package com.example.regionsync.service;
 
 import com.example.regionsync.api.DuplicateEntityException;
 import com.example.regionsync.config.SyncProperties;
+import com.example.regionsync.dedup.EntityDeduplicationService;
 import com.example.regionsync.model.entity.Company;
 import com.example.regionsync.model.enums.ConflictResolutionAction;
 import com.example.regionsync.repository.CompanyRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @Transactional
 @RequiredArgsConstructor
@@ -22,18 +25,17 @@ public class CompanyService {
     private final CompanyRepository companyRepository;
     private final SyncProperties syncProperties;
     private final ConflictRecordService conflictRecordService;
+    private final EntityDeduplicationService entityDeduplicationService;
 
     public Company create(Company company) {
         if (company.getCompanyCode() != null) {
+            // 1. Check local database for existing entity
             Optional<Company> existingOpt = companyRepository.findByCompanyCode(company.getCompanyCode());
             if (existingOpt.isPresent()) {
                 Company existing = existingOpt.get();
                 String currentRegion = syncProperties.getCurrentRegion();
                 String existingRegion = existing.getSourceRegion();
 
-                // Determine the appropriate error message based on whether the
-                // existing entity came from a remote region (synced) or was
-                // created locally.
                 String detail;
                 if (existingRegion != null && !existingRegion.equals(currentRegion)) {
                     detail = "Company with companyCode '" + company.getCompanyCode()
@@ -42,8 +44,6 @@ public class CompanyService {
                     detail = "Company with companyCode '" + company.getCompanyCode() + "' already exists";
                 }
 
-                // Log to sync_conflict_log and sync_event_log so that the
-                // conflict is visible in the metadata tables.
                 conflictRecordService.recordResolvedConflict(
                         "companies",
                         company.getCompanyCode(),
@@ -62,11 +62,67 @@ public class CompanyService {
 
                 throw new DuplicateEntityException(detail);
             }
+
+            // 2. Cross-region deduplication via Redis SETNX.
+            //    tryRegister uses SETNX semantics: only the first region to
+            //    register a given companyCode wins; subsequent attempts from
+            //    other regions are rejected immediately.
+            String currentRegion = syncProperties.getCurrentRegion();
+            boolean registered = entityDeduplicationService.tryRegister(
+                    "companies", company.getCompanyCode(), currentRegion);
+
+            if (!registered) {
+                String registeredRegion = entityDeduplicationService.getRegisteredRegion(
+                        "companies", company.getCompanyCode());
+                // If the same region registered (e.g. concurrent local requests),
+                // this will be caught by a DB unique constraint or the local
+                // check above on retry.  When a different region registered,
+                // return a clear cross-region duplicate error.
+                String detail = "Company with companyCode '" + company.getCompanyCode()
+                        + "' has already been created in "
+                        + (registeredRegion != null ? registeredRegion : "another") + " region";
+                log.warn("Cross-region duplicate detected: companyCode={} registeredBy={}",
+                        company.getCompanyCode(), registeredRegion);
+
+                conflictRecordService.recordResolvedConflict(
+                        "companies",
+                        company.getCompanyCode(),
+                        currentRegion,
+                        registeredRegion != null ? registeredRegion : currentRegion,
+                        "DUPLICATE_ENTITY",
+                        detail,
+                        ConflictResolutionAction.AUTO_WIN);
+                conflictRecordService.recordEventDirect(
+                        "companies",
+                        "CREATE",
+                        company.getCompanyCode(),
+                        currentRegion,
+                        "REJECTED",
+                        detail);
+
+                throw new DuplicateEntityException(detail);
+            }
         }
+
         company.setId(UUID.randomUUID().toString());
         company.setSourceRegion(syncProperties.getCurrentRegion());
         company.setSyncedFromRemote(false);
-        return companyRepository.save(company);
+        try {
+            Company saved = companyRepository.save(company);
+            // Confirm the registration so the key lives for 7 days (beyond
+            // the initial 30-min registration TTL) to guard late duplicates.
+            if (company.getCompanyCode() != null) {
+                entityDeduplicationService.confirm("companies", company.getCompanyCode());
+            }
+            return saved;
+        } catch (Exception e) {
+            // If the DB save fails, release the Redis registration so a
+            // retry or another region can claim the business key.
+            if (company.getCompanyCode() != null) {
+                entityDeduplicationService.release("companies", company.getCompanyCode());
+            }
+            throw e;
+        }
     }
 
     @Transactional(readOnly = true)
